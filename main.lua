@@ -394,7 +394,7 @@ local function verifyKey(key, silent)
             return passKey(key, "คีย์ในเครื่อง", true)
         end
         if not silent then
-            setStatus("คีย์ไม่ถูกต้อง -- กดปุ่ม รับคีย์ เพื่อขอคีย์ก่อน")
+            setStatus("คีย์ไม่ถูกต้อง -- กดปุ่ม Copy link getkey เพื่อขอคีย์ก่อน")
         end
         return false
     end
@@ -599,7 +599,7 @@ end
 --------------------------------------------------------------------
 -- จำคีย์ไว้ใช้ครั้งต่อไป (auto login)
 --------------------------------------------------------------------
--- ถ้ามีคีย์เดิมที่ยังไม่หมดอายุ -> เข้าให้เลย / ถ้าหมดอายุ -> ล้างทิ้งแล้วให้ไปกด รับคีย์ ใหม่
+-- ถ้ามีคีย์เดิมที่ยังไม่หมดอายุ -> เข้าให้เลย / ถ้าหมดอายุ -> ล้างทิ้งแล้วให้ไปกด Copy link getkey ใหม่
 local function tryAutoLogin()
     if not CFG.AutoLogin then return end
     local saved = loadKey()
@@ -614,7 +614,7 @@ local function tryAutoLogin()
         clearKey()
         if keyBox then keyBox.Text = "" end
         if countLabel then countLabel.Text = "" end
-        setStatus("คีย์ที่จำไว้หมดอายุหรือใช้ไม่ได้แล้ว -- กด รับคีย์ เพื่อขอคีย์ใหม่")
+        setStatus("คีย์ที่จำไว้หมดอายุหรือใช้ไม่ได้แล้ว -- กด Copy link getkey เพื่อขอคีย์ใหม่")
         log("คีย์ที่จำไว้ใช้ไม่ได้ -- ล้างออกแล้ว")
         return
     end
@@ -647,7 +647,7 @@ local function buildUI()
     gui.Parent = LP:WaitForChild("PlayerGui")
 
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(0, 380, 0, 288)
+    f.Size = UDim2.new(0, 380, 0, 310)
     f.Position = UDim2.new(0, 24, 0, 90)
     f.BackgroundColor3 = Color3.fromRGB(11, 14, 18)
     f.BorderSizePixel = 0
@@ -691,7 +691,7 @@ local function buildUI()
 
     statusLabel = Instance.new("TextLabel")
     statusLabel.Size = UDim2.new(1, -24, 0, 36)
-    statusLabel.Position = UDim2.new(0, 12, 0, 84)
+    statusLabel.Position = UDim2.new(0, 12, 0, 238)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Text = ""
     statusLabel.TextColor3 = Color3.fromRGB(124, 139, 153)
@@ -702,8 +702,8 @@ local function buildUI()
     statusLabel.Parent = f
 
     countLabel = Instance.new("TextLabel")
-    countLabel.Size = UDim2.new(1, -24, 0, 20)
-    countLabel.Position = UDim2.new(0, 12, 0, 122)
+    countLabel.Size = UDim2.new(1, -24, 0, 22)
+    countLabel.Position = UDim2.new(0, 12, 0, 276)
     countLabel.BackgroundTransparency = 1
     countLabel.Text = ""
     countLabel.TextColor3 = Color3.fromRGB(34, 211, 238)
@@ -714,12 +714,12 @@ local function buildUI()
 
     -- กล่องบนสุด: โชว์แค่ชื่อแมพที่ตรวจเจอ
     local mapBox = Instance.new("TextLabel")
-    mapBox.Size = UDim2.new(1, -24, 0, 40)
+    mapBox.Size = UDim2.new(1, -24, 0, 46)
     mapBox.Position = UDim2.new(0, 12, 0, 36)
     mapBox.BackgroundColor3 = Color3.fromRGB(20, 24, 31)
     mapBox.TextColor3 = Color3.fromRGB(34, 211, 238)
     mapBox.Font = Enum.Font.GothamBlack
-    mapBox.TextSize = 17
+    mapBox.TextSize = 18
     mapBox.Text = "กำลังตรวจแมพ..."
     mapBox.TextWrapped = true
     mapBox.TextXAlignment = Enum.TextXAlignment.Center
@@ -732,12 +732,12 @@ local function buildUI()
     mbStroke.Transparency = 0.75
     mbStroke.Parent = mapBox
 
-    -- ปุ่มเดียว: รับคีย์
-    local acceptBtn = mkButton(f, "รับคีย์", 12, 148, 356, 38, Color3.fromRGB(34, 211, 238), Color3.fromRGB(10, 20, 26), 14)
+    -- ปุ่มเดียว: คัดลอกลิงก์ไปหน้า getkey
+    local acceptBtn = mkButton(f, "Copy link getkey", 12, 92, 356, 40, Color3.fromRGB(34, 211, 238), Color3.fromRGB(10, 20, 26), 14)
 
     keyBox = Instance.new("TextBox")
-    keyBox.Size = UDim2.new(1, -24, 0, 34)
-    keyBox.Position = UDim2.new(0, 12, 0, 194)
+    keyBox.Size = UDim2.new(1, -24, 0, 36)
+    keyBox.Position = UDim2.new(0, 12, 0, 142)
     keyBox.BackgroundColor3 = Color3.fromRGB(20, 24, 31)
     keyBox.TextColor3 = Color3.fromRGB(230, 238, 245)
     keyBox.PlaceholderText = "วางคีย์ที่นี่ (Get Key จากเว็บ)"
@@ -749,9 +749,9 @@ local function buildUI()
     keyBox.Parent = f
     Instance.new("UICorner", keyBox).CornerRadius = UDim.new(0, 7)
 
-    keyBtn = mkButton(f, "ยืนยันคีย์ + รันสคริปต์", 12, 236, 356, 40, Color3.fromRGB(34, 211, 238), Color3.fromRGB(10, 20, 26), 14)
+    keyBtn = mkButton(f, "ยืนยันคีย์ + รันสคริปต์", 12, 188, 356, 42, Color3.fromRGB(34, 211, 238), Color3.fromRGB(10, 20, 26), 14)
 
-    confirmBtn = mkButton(f, "เปิดลิงก์ / ไปต่อ", 12, 236, 356, 40, Color3.fromRGB(255, 170, 60), Color3.fromRGB(30, 20, 5), 13)
+    confirmBtn = mkButton(f, "เปิดลิงก์ / ไปต่อ", 12, 188, 356, 42, Color3.fromRGB(255, 170, 60), Color3.fromRGB(30, 20, 5), 13)
     confirmBtn.Visible = false
 
     -- ลากหน้าต่าง
@@ -783,8 +783,19 @@ local function buildUI()
     end
 
     acceptBtn.MouseButton1Click:Connect(function()
+        -- กดแล้วเปลี่ยนปุ่มเป็น Copied แล้วค่อยกลับเป็นข้อความเดิม
+        local function flashCopied()
+            acceptBtn.Text = "Copied"
+            task.delay(2, function()
+                if acceptBtn and acceptBtn.Parent then
+                    acceptBtn.Text = "Copy link getkey"
+                end
+            end)
+        end
+
         if CFG.LocalKeyMode then
             task.spawn(startAdGate)
+            flashCopied()
             return
         end
         if CFG.KeyGetAPI ~= "" then
@@ -797,10 +808,12 @@ local function buildUI()
                 end
                 if setclipboard then pcall(setclipboard, link) end
                 openLink(link)
-                setStatus("เปิดหน้าเว็บขอคีย์แล้ว -- ดูโฆษณาให้ครบ แล้วคัดลอกคีย์มากรอก")
+                flashCopied()
+                setStatus("คัดลอกลิงก์แล้ว -- เปิดหน้าเว็บ ดูโฆษณาให้ครบ แล้วเอาคีย์มากรอก")
             end)
         else
             if setclipboard then pcall(setclipboard, tostring(CFG.KeyPage or CFG.KeyLink or "")) end
+            flashCopied()
             setStatus("คัดลอกลิงก์ขอคีย์แล้ว: " .. tostring(CFG.KeyPage or CFG.KeyLink or ""))
         end
     end)

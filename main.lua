@@ -21,7 +21,7 @@ local LP      = Players.LocalPlayer
 --------------------------------------------------------------------
 local CFG = {
     -- เปลี่ยน <USER> เป็นชื่อบัญชี GitHub ของคุณ
-    BaseURL   = "https://raw.githubusercontent.com/ratchanon-create/kistrox-hub/main/",
+    BaseURL   = "https://raw.githubusercontent.com/ratchanon-create/KT/main/",
     Title     = "KISTROX HUB",
     LogFile   = "kistrox_log.txt",
     UseCache  = true,        -- จำสคริปต์ที่โหลดไว้ ครั้งต่อไปไม่ต้องโหลดซ้ำ

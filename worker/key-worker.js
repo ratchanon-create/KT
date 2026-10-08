@@ -13,7 +13,7 @@
 //  ตั้งค่า (Settings -> Variables and Secrets):
 //    AD_URL       = https://uplcm.com/4/11984132
 //    WAIT_SECONDS = 30
-//    EXP_HOURS    = 12
+//    EXP_HOURS    = 8      (คีย์มีอายุ 8 ชั่วโมง)
 //    ADMIN_KEY    = รหัสลับของเราเอง (Secret) ใช้ตอนอัปโหลดสคริปต์ — ห้ามให้ใครรู้
 //  และผูก KV namespace ไว้ที่ตัวแปรชื่อ KEYS (จำเป็น)
 //
@@ -101,7 +101,6 @@ function page(uid, adUrl, waitSec, expHours) {
     <button class="primary" id="copy">คัดลอกคีย์</button>
     <div class="steps">
       <p><b>วิธีใช้:</b> คัดลอกคีย์ → เข้าเกม → วางในช่อง <code>วางคีย์ที่นี่</code> → กด <b>ยืนยันคีย์ + รันสคริปต์</b></p>
-      <p class="warn" id="note"></p>
     </div>
   </div>
 </div>
@@ -132,7 +131,6 @@ function page(uid, adUrl, waitSec, expHours) {
       const j = await r.json();
       if (j.ok && j.key) {
         $("key").textContent = j.key;
-        $("note").textContent = "คีย์นี้ผูกกับเครื่องของคุณ — หมดอายุใน " + j.expires_in_hours + " ชั่วโมง";
         show(3);
       } else if (j.wait) {
         startCountdown(j.wait);
@@ -167,7 +165,7 @@ function page(uid, adUrl, waitSec, expHours) {
     try {
       const r = await fetch("./status?uid=" + encodeURIComponent(UID));
       const j = await r.json();
-      if (j.key) { $("key").textContent = j.key; $("note").textContent = "คีย์เดิมของคุณ (ยังไม่หมดอายุ)"; show(3); }
+      if (j.key) { $("key").textContent = j.key; show(3); }
       else if (j.wait > 0) { startCountdown(j.wait); }
       else if (j.started) { issue(); }
     } catch (e) {}
@@ -190,7 +188,7 @@ export default {
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const AD = env.AD_URL || "https://uplcm.com/4/11984132";
     const WAIT = parseInt(env.WAIT_SECONDS || "30", 10);
-    const EXP_HOURS = parseFloat(env.EXP_HOURS || "12");
+    const EXP_HOURS = parseFloat(env.EXP_HOURS || "8");
 
     // ---------- หน้าเว็บรับคีย์ ----------
     if (path === "/getkey") {

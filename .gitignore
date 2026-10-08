@@ -6,8 +6,10 @@ games/anime-dice.lua
 # ── ไฟล์ที่เกิดตอนรันในเกม ──
 kistrox_log.txt
 kistrox_keyinfo.txt
+kistrox_key.txt
 kistrox_cache_*.lua
 
 # ── ของชั่วคราว ──
 _t/
 node_modules/
+.wrangler/

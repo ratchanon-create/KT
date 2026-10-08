@@ -49,8 +49,12 @@ local CFG = {
     AdWait    = 30,                                    -- ต้องรอกี่วินาทีก่อนได้คีย์
     LocalKeyMode = false,                              -- false = ใช้ Worker ตรวจคีย์จริง (กันบายพาส)
 
+    -- จำคีย์ไว้ ครั้งต่อไปที่รัน ถ้าคีย์ยังไม่หมดอายุจะเข้าสู่ระบบให้อัตโนมัติ
+    AutoLogin = true,
+
     UseCache  = true,
     LogFile   = "kistrox_log.txt",
+    KeyFile   = "kistrox_key.txt",
 }
 
 --------------------------------------------------------------------
@@ -310,6 +314,24 @@ local function writeKeyState(k, t)
     pcall(function() writefile(KEYSTATE, tostring(k) .. "\n" .. tostring(t)) end)
 end
 
+-- ไฟล์จำคีย์ไว้ใช้ครั้งต่อไป (auto login)
+local function saveKey(k)
+    if not writefile then return end
+    pcall(function() writefile(CFG.KeyFile, tostring(k)) end)
+end
+
+local function loadKey()
+    if not (isfile and isfile(CFG.KeyFile)) then return "" end
+    local ok, d = pcall(readfile, CFG.KeyFile)
+    if not ok or type(d) ~= "string" then return "" end
+    return (d:gsub("%s", ""))
+end
+
+local function clearKey()
+    if not writefile then return end
+    pcall(function() writefile(CFG.KeyFile, "") end)
+end
+
 -- คืนค่า: (ผ่านไหม, ข้อความ)
 local function checkLifetime(key)
     local hrs = tonumber(CFG.KeyLifetimeHours) or 0
@@ -372,7 +394,7 @@ local function verifyKey(key, silent)
             return passKey(key, "คีย์ในเครื่อง", true)
         end
         if not silent then
-            setStatus("คีย์ไม่ถูกต้อง -- กดปุ่ม เปิดโฆษณา + รับคีย์ เพื่อรับคีย์ก่อน")
+            setStatus("คีย์ไม่ถูกต้อง -- กดปุ่ม รับคีย์ เพื่อขอคีย์ก่อน")
         end
         return false
     end
@@ -521,7 +543,7 @@ local function startAdGate()
 end
 local detected, detectedName = nil, ""
 
-local function startFlow()
+local function startFlow(preKey)
     local g = detected or (DEFAULT_FILE and { label = "default", file = DEFAULT_FILE } or nil)
     if not g then
         setStatus("แมพนี้ยังไม่รองรับ -- กด 'ข้อมูลแมพนี้' เพื่อดู PlaceId แล้วแจ้งเพิ่ม")
@@ -531,7 +553,9 @@ local function startFlow()
     gating, confirmed = true, false
     local usedKey = ""      -- คีย์ที่ผ่านแล้ว เอาไปใช้ขอดึงโค้ดสคริปต์
 
-    if CFG.GateMode == "key" then
+    if preKey and preKey ~= "" then
+        usedKey = preKey                 -- คีย์ที่ตรวจมาแล้ว (auto login)
+    elseif CFG.GateMode == "key" then
         -- ตรวจคีย์ที่ผู้ใช้กรอกก่อน
         local key = keyBox and keyBox.Text or ""
         if not verifyKey(key) then
@@ -564,8 +588,39 @@ local function startFlow()
     end
 
     if countLabel then countLabel.Text = "กำลังโหลดสคริปต์..." end
-    runFor(g, usedKey)
+    local okRun = runFor(g, usedKey)
+    if okRun and usedKey ~= "" then
+        saveKey(usedKey)                 -- รันผ่านแล้วค่อยจำ ครั้งต่อไป auto login ได้
+        log("จำคีย์ไว้ใช้ครั้งต่อไปแล้ว")
+    end
     gating = false
+end
+
+--------------------------------------------------------------------
+-- จำคีย์ไว้ใช้ครั้งต่อไป (auto login)
+--------------------------------------------------------------------
+-- ถ้ามีคีย์เดิมที่ยังไม่หมดอายุ -> เข้าให้เลย / ถ้าหมดอายุ -> ล้างทิ้งแล้วให้ไปกด รับคีย์ ใหม่
+local function tryAutoLogin()
+    if not CFG.AutoLogin then return end
+    local saved = loadKey()
+    if saved == "" then return end
+
+    log("พบคีย์ที่จำไว้ -- กำลังตรวจสอบอัตโนมัติ")
+    setStatus("พบคีย์ที่เคยใส่ไว้ กำลังเข้าสู่ระบบอัตโนมัติ...")
+    if countLabel then countLabel.Text = "กำลังตรวจคีย์ที่จำไว้..." end
+    if keyBox then keyBox.Text = saved end
+
+    if not verifyKey(saved, true) then
+        clearKey()
+        if keyBox then keyBox.Text = "" end
+        if countLabel then countLabel.Text = "" end
+        setStatus("คีย์ที่จำไว้หมดอายุหรือใช้ไม่ได้แล้ว -- กด รับคีย์ เพื่อขอคีย์ใหม่")
+        log("คีย์ที่จำไว้ใช้ไม่ได้ -- ล้างออกแล้ว")
+        return
+    end
+
+    log("auto login สำเร็จ -- รันสคริปต์เลย")
+    startFlow(saved)
 end
 
 --------------------------------------------------------------------
@@ -592,7 +647,7 @@ local function buildUI()
     gui.Parent = LP:WaitForChild("PlayerGui")
 
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(0, 350, 0, 260)
+    f.Size = UDim2.new(0, 380, 0, 288)
     f.Position = UDim2.new(0, 24, 0, 90)
     f.BackgroundColor3 = Color3.fromRGB(11, 14, 18)
     f.BorderSizePixel = 0
@@ -635,10 +690,10 @@ local function buildUI()
     Instance.new("UICorner", close).CornerRadius = UDim.new(0, 6)
 
     statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(1, -24, 0, 44)
-    statusLabel.Position = UDim2.new(0, 12, 0, 34)
+    statusLabel.Size = UDim2.new(1, -24, 0, 36)
+    statusLabel.Position = UDim2.new(0, 12, 0, 84)
     statusLabel.BackgroundTransparency = 1
-    statusLabel.Text = "กำลังตรวจแมพ..."
+    statusLabel.Text = ""
     statusLabel.TextColor3 = Color3.fromRGB(124, 139, 153)
     statusLabel.Font = Enum.Font.Gotham
     statusLabel.TextSize = 11
@@ -647,51 +702,56 @@ local function buildUI()
     statusLabel.Parent = f
 
     countLabel = Instance.new("TextLabel")
-    countLabel.Size = UDim2.new(1, -24, 0, 22)
-    countLabel.Position = UDim2.new(0, 12, 0, 78)
+    countLabel.Size = UDim2.new(1, -24, 0, 20)
+    countLabel.Position = UDim2.new(0, 12, 0, 122)
     countLabel.BackgroundTransparency = 1
     countLabel.Text = ""
     countLabel.TextColor3 = Color3.fromRGB(34, 211, 238)
     countLabel.Font = Enum.Font.GothamBold
-    countLabel.TextSize = 14
+    countLabel.TextSize = 13
     countLabel.TextXAlignment = Enum.TextXAlignment.Left
     countLabel.Parent = f
 
-    -- แถวขอคีย์
-    local linkBox = Instance.new("TextBox")
-    linkBox.Size = UDim2.new(1, -24, 0, 22)
-    linkBox.Position = UDim2.new(0, 12, 0, 104)
-    linkBox.BackgroundColor3 = Color3.fromRGB(20, 24, 31)
-    linkBox.TextColor3 = Color3.fromRGB(150, 190, 210)
-    linkBox.Font = Enum.Font.Code
-    linkBox.TextSize = 10
-    linkBox.Text = (CFG.KeyGetAPI ~= "" and (CFG.KeyGetAPI .. "?" .. (CFG.KeyGetAPIParam or "uid") .. "=" .. getHWID()))
-        or tostring(CFG.KeyPage or CFG.KeyLink or "")
-    linkBox.TextEditable = false
-    linkBox.ClearTextOnFocus = false
-    linkBox.Parent = f
-    Instance.new("UICorner", linkBox).CornerRadius = UDim.new(0, 6)
+    -- กล่องบนสุด: โชว์แค่ชื่อแมพที่ตรวจเจอ
+    local mapBox = Instance.new("TextLabel")
+    mapBox.Size = UDim2.new(1, -24, 0, 40)
+    mapBox.Position = UDim2.new(0, 12, 0, 36)
+    mapBox.BackgroundColor3 = Color3.fromRGB(20, 24, 31)
+    mapBox.TextColor3 = Color3.fromRGB(34, 211, 238)
+    mapBox.Font = Enum.Font.GothamBlack
+    mapBox.TextSize = 17
+    mapBox.Text = "กำลังตรวจแมพ..."
+    mapBox.TextWrapped = true
+    mapBox.TextXAlignment = Enum.TextXAlignment.Center
+    mapBox.TextYAlignment = Enum.TextYAlignment.Center
+    mapBox.Parent = f
+    Instance.new("UICorner", mapBox).CornerRadius = UDim.new(0, 8)
+    local mbStroke = Instance.new("UIStroke")
+    mbStroke.Color = Color3.fromRGB(34, 211, 238)
+    mbStroke.Thickness = 1
+    mbStroke.Transparency = 0.75
+    mbStroke.Parent = mapBox
 
-    local copyLink = mkButton(f, "เปิดโฆษณา + รับคีย์", 12, 130, 208, 26, Color3.fromRGB(34, 211, 238), Color3.fromRGB(10, 20, 26), 12)
-    local openLinkBtn = mkButton(f, "ขอคีย์ใหม่ (ดูโฆษณา)", 226, 130, 111, 26, Color3.fromRGB(26, 31, 39), nil, 10)
+    -- ปุ่มเดียว: รับคีย์
+    local acceptBtn = mkButton(f, "รับคีย์", 12, 148, 356, 38, Color3.fromRGB(34, 211, 238), Color3.fromRGB(10, 20, 26), 14)
 
     keyBox = Instance.new("TextBox")
-    keyBox.Size = UDim2.new(1, -24, 0, 28)
-    keyBox.Position = UDim2.new(0, 12, 0, 164)
+    keyBox.Size = UDim2.new(1, -24, 0, 34)
+    keyBox.Position = UDim2.new(0, 12, 0, 194)
     keyBox.BackgroundColor3 = Color3.fromRGB(20, 24, 31)
     keyBox.TextColor3 = Color3.fromRGB(230, 238, 245)
     keyBox.PlaceholderText = "วางคีย์ที่นี่ (Get Key จากเว็บ)"
     keyBox.PlaceholderColor3 = Color3.fromRGB(110, 125, 140)
     keyBox.Font = Enum.Font.Code
-    keyBox.TextSize = 12
+    keyBox.TextSize = 13
     keyBox.Text = ""
     keyBox.ClearTextOnFocus = false
     keyBox.Parent = f
     Instance.new("UICorner", keyBox).CornerRadius = UDim.new(0, 7)
 
-    keyBtn = mkButton(f, "ยืนยันคีย์ + รันสคริปต์", 12, 198, 326, 30, Color3.fromRGB(34, 211, 238), Color3.fromRGB(10, 20, 26), 13)
+    keyBtn = mkButton(f, "ยืนยันคีย์ + รันสคริปต์", 12, 236, 356, 40, Color3.fromRGB(34, 211, 238), Color3.fromRGB(10, 20, 26), 14)
 
-    confirmBtn = mkButton(f, "เปิดลิงก์ / ไปต่อ", 12, 198, 326, 30, Color3.fromRGB(255, 170, 60), Color3.fromRGB(30, 20, 5), 12)
+    confirmBtn = mkButton(f, "เปิดลิงก์ / ไปต่อ", 12, 236, 356, 40, Color3.fromRGB(255, 170, 60), Color3.fromRGB(30, 20, 5), 13)
     confirmBtn.Visible = false
 
     -- ลากหน้าต่าง
@@ -713,21 +773,16 @@ local function buildUI()
     end)
 
     detected, detectedName = detect()
-    local info = ("PlaceId %d | GameId %d | %s"):format(game.PlaceId, game.GameId,
-        (detectedName ~= "" and detectedName or "ไม่ทราบชื่อ"))
-
     if detected then
-        if CFG.GateMode == "key" then
-            setStatus("ตรวจพบแมพ: " .. detected.label ..
-                " -- กด เปิดโฆษณา + รับคีย์ ไปเอาโค้ดจากหน้าเว็บ (ดูโฆษณา " .. CFG.AdWait .. " วิ) แล้วมากรอก")
-        else
-            setStatus("ตรวจพบแมพ: " .. detected.label .. " -- กดปุ่มด้านล่างเพื่อเริ่ม")
-        end
+        mapBox.Text = detected.label
+        setStatus("")
+        task.spawn(tryAutoLogin)         -- มีคีย์เดิมที่ยังไม่หมดอายุ = เข้าให้เลย
     else
-        setStatus("ไม่พบแมพนี้ในรายการที่รองรับ (PlaceId: " .. game.PlaceId .. ")")
+        mapBox.Text = "ไม่พบแมพนี้ในรายการ"
+        setStatus("PlaceId: " .. tostring(game.PlaceId) .. " -- ส่งให้นักพัฒนาเพื่อเพิ่มแมพนี้")
     end
 
-    copyLink.MouseButton1Click:Connect(function()
+    acceptBtn.MouseButton1Click:Connect(function()
         if CFG.LocalKeyMode then
             task.spawn(startAdGate)
             return
@@ -740,33 +795,14 @@ local function buildUI()
                     setStatus("ขออัตโนมัติไม่สำเร็จ (" .. tostring(err) .. ") -- คัดลอกลิงก์ปกติให้แล้ว")
                     return
                 end
-                linkBox.Text = link
                 if setclipboard then pcall(setclipboard, link) end
                 openLink(link)
-                setStatus("คัดลอกลิงก์เฉพาะตัวแล้ว -- ทำโฆษณาให้ครบ แล้วเอาโค้ดจากหน้าเว็บมากรอก")
+                setStatus("เปิดหน้าเว็บขอคีย์แล้ว -- ดูโฆษณาให้ครบ แล้วคัดลอกคีย์มากรอก")
             end)
         else
             if setclipboard then pcall(setclipboard, tostring(CFG.KeyPage or CFG.KeyLink or "")) end
             setStatus("คัดลอกลิงก์ขอคีย์แล้ว: " .. tostring(CFG.KeyPage or CFG.KeyLink or ""))
         end
-    end)
-    openLinkBtn.MouseButton1Click:Connect(function()
-        if CFG.LocalKeyMode then
-            task.spawn(startAdGate)
-            return
-        end
-        if CFG.KeyGetAPI ~= "" then
-            local link = CFG.KeyGetAPI .. "?" .. (CFG.KeyGetAPIParam or "uid") .. "=" .. getHWID()
-            linkBox.Text = link
-            if setclipboard then pcall(setclipboard, link) end
-            local ok = openLink(link)
-            setStatus(ok and "เปิดหน้าเว็บขอคีย์แล้ว -- ดูโฆษณาให้ครบ 30 วิ แล้วคัดลอกคีย์มากรอก"
-                or "เปิดอัตโนมัติไม่ได้ -- คัดลอกลิงก์ให้แล้ว เอาไปวางในเบราว์เซอร์")
-            return
-        end
-        local ok = openLink(CFG.AdLink)
-        if setclipboard then pcall(setclipboard, CFG.AdLink) end
-        setStatus(ok and "เปิดโฆษณาแล้ว (คัดลอกลิงก์ให้ด้วย)" or "เปิดอัตโนมัติไม่ได้ -- คัดลอกลิงก์ให้แล้ว เอาไปวางในเบราว์เซอร์")
     end)
     keyBtn.MouseButton1Click:Connect(function()
         if gating then return end

@@ -18,17 +18,20 @@
   // สำคัญ: ไม่ให้ลบตัวแปร/รหัสลับที่ตั้งไว้ในหน้าเว็บ Cloudflare (เช่น ADMIN_KEY)
   "keep_vars": true,
 
+  // ปิด preview URL (ตอน deploy แรก wrangler เปิดให้เอง) ให้เหลือ URL เดียวเหมือนเดิม
+  "preview_urls": false,
+
   // ค่าธรรมดา (ไม่ลับ) — ที่เคยตั้งในหน้าเว็บ Cloudflare
   "vars": {
     "AD_URL": "https://uplcm.com/4/11984132",
     "WAIT_SECONDS": "30",
-    "EXP_HOURS": "12"
+    "EXP_HOURS": "8"
   },
 
   // ถังเก็บคีย์ — ต้องใส่ id จริง ไม่งั้นคีย์/สคริปต์ที่เก็บไว้จะเข้าถึงไม่ได้
-  // หา id ได้จาก: npx wrangler kv namespace list  หรือหน้าเว็บ Cloudflare -> Storage & Databases -> KV
+  // id ของ namespace KISTROX_KEYS (ยืนยันแล้วว่ามี script:anime-dice อยู่ข้างใน)
   "kv_namespaces": [
-    { "binding": "KEYS", "id": "ใส่_KV_NAMESPACE_ID_ตรงนี้" }
+    { "binding": "KEYS", "id": "efe8ff632d6a4cc4b1dd7646cec78a91" }
   ],
 
   // ADMIN_KEY ไม่ใส่ที่นี่ — ใช้ "npx wrangler secret put ADMIN_KEY" เพื่อไม่ให้รหัสลับไปอยู่ในไฟล์

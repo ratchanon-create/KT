@@ -51,18 +51,22 @@ function safeName(v) {
 }
 
 function page(uid, adUrl, waitSec, expHours) {
-  return `<!doctype html><html lang="th"><head><meta charset="utf-8">
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>KISTROX HUB — รับคีย์</title>
+<title>KISTROX HUB — Get Key</title>
 <style>
  :root{--accent:#22d3ee;--bg:#0b0e12;--card:#14181f;--line:#1e2530;--text:#e6eef5;--sub:#8ea3b5}
  *{box-sizing:border-box}
  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
       font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
       display:flex;align-items:center;justify-content:center;padding:18px}
- .card{background:var(--card);border:1px solid #22d3ee55;border-radius:18px;
+ .card{position:relative;background:var(--card);border:1px solid #22d3ee55;border-radius:18px;
        padding:26px;max-width:560px;width:100%;box-shadow:0 12px 40px #0006}
- .brand{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+ .lang{position:absolute;top:14px;right:14px;display:flex;gap:6px}
+ .lang button{border:1px solid var(--line);background:#1a1f27;color:var(--sub);
+       border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer}
+ .lang button.on{background:var(--accent);color:#0a141a;border-color:var(--accent)}
+ .brand{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-right:96px}
  .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
  h1{font-size:19px;margin:0}
  p{color:var(--sub);font-size:14px;line-height:1.6;margin:8px 0}
@@ -71,7 +75,6 @@ function page(uid, adUrl, waitSec, expHours) {
  button{width:100%;border:0;border-radius:11px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:.15s}
  .primary{background:var(--accent);color:#0a141a}
  .primary:hover{filter:brightness(1.08)}
- .ghost{background:#1a1f27;color:var(--text);border:1px solid var(--line)}
  .timer{font-size:34px;font-weight:800;color:var(--accent);text-align:center;margin:18px 0 6px;
         font-variant-numeric:tabular-nums}
  .steps{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
@@ -81,27 +84,28 @@ function page(uid, adUrl, waitSec, expHours) {
  .hide{display:none}
 </style></head><body>
 <div class="card">
+  <div class="lang" id="lang">
+    <button type="button" data-l="en">EN</button><button type="button" data-l="th">TH</button>
+  </div>
   <div class="brand"><span class="dot"></span><h1>KISTROX HUB</h1></div>
 
   <div id="step1">
-    <p><b>ขั้นที่ 1:</b> กดปุ่มด้านล่างเพื่อเปิดโฆษณา (จะเปิดแท็บใหม่)</p>
-    <button class="primary" id="adBtn">เปิดโฆษณา / ดูโฆษณา</button>
-    <div class="steps"><p class="warn">ต้องดูโฆษณาให้ครบก่อน จึงจะได้คีย์ (ระบบจะนับเวลา ${waitSec} วินาที)</p></div>
+    <p id="t1"></p>
+    <button class="primary" id="adBtn"></button>
+    <div class="steps"><p class="warn" id="t2"></p></div>
   </div>
 
   <div id="step2" class="hide">
-    <p><b>ขั้นที่ 2:</b> กำลังนับเวลา — กรุณาอย่าปิดหน้านี้</p>
+    <p id="t3"></p>
     <div class="timer" id="timer">${waitSec}</div>
-    <p id="hint" class="warn">รอให้ครบค่อยกดรับคีย์</p>
+    <p id="hint" class="warn"></p>
   </div>
 
   <div id="step3" class="hide">
-    <p>ได้คีย์แล้ว ✅ คัดลอกไปวางในหน้าต่าง KISTROX HUB ในเกม</p>
-    <div class="box" id="key">…</div>
-    <button class="primary" id="copy">คัดลอกคีย์</button>
-    <div class="steps">
-      <p><b>วิธีใช้:</b> คัดลอกคีย์ → เข้าเกม → วางในช่อง <code>วางคีย์ที่นี่</code> → กด <b>ยืนยันคีย์ + รันสคริปต์</b></p>
-    </div>
+    <p id="t4"></p>
+    <div class="box" id="key">...</div>
+    <button class="primary" id="copy"></button>
+    <div class="steps"><p id="t5"></p></div>
   </div>
 </div>
 
@@ -109,19 +113,74 @@ function page(uid, adUrl, waitSec, expHours) {
   const UID = ${JSON.stringify(uid)};
   const AD  = ${JSON.stringify(adUrl)};
   const WAIT = ${waitSec};
+
+  const T = {
+    en: {
+      pageTitle: "KISTROX HUB — Get Key",
+      t1: "<b>Step 1:</b> Click the button below to open the ad (it opens in a new tab)",
+      adBtn: "Watch ad",
+      t2: "You must watch the ad before you can get a key. The timer runs for {n} seconds.",
+      t3: "<b>Step 2:</b> Counting down — please keep this page open",
+      hint: "Wait until the timer reaches zero",
+      issuing: "Time is up — issuing your key...",
+      t4: "Key ready ✅ Copy it and paste it into the KISTROX HUB window in-game",
+      copy: "Copy key",
+      copied: "Copied ✓",
+      t5: "<b>How to use:</b> copy the key → go in-game → paste it in the key box → press <b>Confirm key + Run script</b>",
+      fail: "Something went wrong — please reload this page and try again.",
+      conn: "Connection failed: "
+    },
+    th: {
+      pageTitle: "KISTROX HUB — รับคีย์",
+      t1: "<b>ขั้นที่ 1:</b> กดปุ่มด้านล่างเพื่อเปิดโฆษณา (จะเปิดแท็บใหม่)",
+      adBtn: "เปิดโฆษณา / ดูโฆษณา",
+      t2: "ต้องดูโฆษณาให้ครบก่อน จึงจะได้คีย์ (ระบบจะนับเวลา {n} วินาที)",
+      t3: "<b>ขั้นที่ 2:</b> กำลังนับเวลา — กรุณาอย่าปิดหน้านี้",
+      hint: "รอให้ครบค่อยกดรับคีย์",
+      issuing: "ครบเวลาแล้ว กำลังออกคีย์...",
+      t4: "ได้คีย์แล้ว ✅ คัดลอกไปวางในหน้าต่าง KISTROX HUB ในเกม",
+      copy: "คัดลอกคีย์",
+      copied: "คัดลอกแล้ว ✓",
+      t5: "<b>วิธีใช้:</b> คัดลอกคีย์ → เข้าเกม → วางในช่องใส่คีย์ → กด <b>Confirm key + Run script</b>",
+      fail: "เกิดข้อผิดพลาด — กรุณารีเฟรชหน้านี้แล้วลองใหม่",
+      conn: "เชื่อมต่อไม่ได้: "
+    }
+  };
+
   const $ = (id) => document.getElementById(id);
   const show = (n) => { ["step1","step2","step3"].forEach((s,i)=> $(s).classList.toggle("hide", i !== n-1)); };
+  const fill = (txt) => String(txt).split("{n}").join(String(WAIT));
+
+  let LANG = "en";
+  let copyState = "idle";
+
+  function setLang(l) {
+    if (!T[l]) l = "en";
+    LANG = l;
+    const t = T[l];
+    for (const k of Object.keys(t)) {
+      const el = $(k);
+      if (el) el.innerHTML = fill(t[k]);
+    }
+    document.title = t.pageTitle;
+    document.documentElement.lang = l;
+    $("copy").textContent = (copyState === "done") ? t.copied : t.copy;
+    for (const b of document.querySelectorAll("#lang button")) {
+      b.classList.toggle("on", b.dataset.l === l);
+    }
+  }
 
   let tick = null;
   function startCountdown(left) {
     show(2);
     let t = left;
     $("timer").textContent = t;
+    $("hint").textContent = T[LANG].hint;
     clearInterval(tick);
     tick = setInterval(() => {
       t -= 1;
       $("timer").textContent = Math.max(0, t);
-      if (t <= 0) { clearInterval(tick); $("hint").textContent = "ครบเวลาแล้ว กำลังออกคีย์..."; issue(); }
+      if (t <= 0) { clearInterval(tick); $("hint").textContent = T[LANG].issuing; issue(); }
     }, 1000);
   }
 
@@ -135,32 +194,41 @@ function page(uid, adUrl, waitSec, expHours) {
       } else if (j.wait) {
         startCountdown(j.wait);
       } else {
-        $("hint").textContent = "เกิดข้อผิดพลาด: " + (j.error || "ไม่ทราบสาเหตุ");
+        console.warn("issue failed:", j);
+        $("hint").textContent = T[LANG].fail;
         show(2);
       }
     } catch (e) {
-      $("hint").textContent = "เชื่อมต่อไม่ได้: " + e;
+      $("hint").textContent = T[LANG].conn + e;
     }
   }
 
   $("adBtn").addEventListener("click", async () => {
-    window.open(AD, "_blank");                   // เปิดโฆษณาแท็บใหม่
+    window.open(AD, "_blank");
     try { await fetch("./adstart?uid=" + encodeURIComponent(UID)); } catch (e) {}
     startCountdown(WAIT);
   });
 
-  $("copy").addEventListener("click", async (e) => {
+  $("copy").addEventListener("click", async () => {
     const t = $("key").textContent;
     try { await navigator.clipboard.writeText(t); }
     catch (err) {
       const r = document.createRange(); r.selectNodeContents($("key"));
       const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand("copy");
     }
-    e.target.textContent = "คัดลอกแล้ว ✓";
-    setTimeout(() => e.target.textContent = "คัดลอกคีย์", 1800);
+    copyState = "done";
+    $("copy").textContent = T[LANG].copied;
+    setTimeout(() => { copyState = "idle"; $("copy").textContent = T[LANG].copy; }, 1800);
   });
 
-  // กู้สถานะ: ถ้าเคยเริ่มดูโฆษณาแล้ว ให้ไปต่อจากจุดนั้น
+  for (const b of document.querySelectorAll("#lang button")) {
+    b.addEventListener("click", () => setLang(b.dataset.l));
+  }
+
+  // always start in English; use the EN / TH buttons to switch
+  setLang("en");
+
+  // resume: if the ad was already started or a key exists, continue from there
   (async () => {
     try {
       const r = await fetch("./status?uid=" + encodeURIComponent(UID));

@@ -13,3 +13,4 @@ kistrox_cache_*.lua
 _t/
 node_modules/
 .wrangler/
+_dev.log

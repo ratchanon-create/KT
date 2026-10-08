@@ -539,13 +539,14 @@ local function startAdGate()
 end
 local detected, detectedName = nil, ""
 
+-- คืนค่า: nil = สำเร็จ/ไม่ต้องแจ้งอะไร | "Invalid key" | "Load failed" = ให้ปุ่มโชว์ข้อความนี้
 local function startFlow(preKey)
     local g = detected or (DEFAULT_FILE and { label = "default", file = DEFAULT_FILE } or nil)
     if not g then
         setStatus("This map is not supported yet -- send the PlaceId to the developer")
-        return
+        return nil
     end
-    if gating then return end
+    if gating then return nil end
     gating, confirmed = true, false
     local usedKey = ""      -- คีย์ที่ผ่านแล้ว เอาไปใช้ขอดึงโค้ดสคริปต์
 
@@ -556,7 +557,7 @@ local function startFlow(preKey)
         local key = keyBox and keyBox.Text or ""
         if not verifyKey(key) then
             gating = false
-            return
+            return "Invalid key"
         end
         usedKey = key
 
@@ -588,6 +589,8 @@ local function startFlow(preKey)
         log("Saved key for next time")
     end
     gating = false
+    if not okRun then return "Load failed" end
+    return nil
 end
 
 --------------------------------------------------------------------
@@ -630,6 +633,16 @@ local function mkButton(parent, txt, x, y, w, h, color, txtColor, textSize)
     b.Parent = parent
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
     return b
+end
+
+-- โชว์ข้อความบนปุ่มชั่วคราวแล้วกลับเป็นข้อความเดิม
+local function flashBtn(btn, msg)
+    if not btn then return end
+    local orig = btn.Text
+    btn.Text = msg
+    task.delay(3, function()
+        if btn and btn.Parent then btn.Text = orig end
+    end)
 end
 
 local function buildUI()
@@ -790,7 +803,10 @@ local function buildUI()
     end)
     keyBtn.MouseButton1Click:Connect(function()
         if gating then return end
-        task.spawn(startFlow)
+        task.spawn(function()
+            local err = startFlow()
+            if err then flashBtn(keyBtn, err) end
+        end)
     end)
     confirmBtn.MouseButton1Click:Connect(function()
         openLink(CFG.AdLink)

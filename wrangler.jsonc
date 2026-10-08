@@ -1,0 +1,36 @@
+//=====================================================================
+//  ตั้งค่าสำหรับ deploy Worker ด้วยคำสั่ง wrangler (ไม่ต้องใช้หน้าเว็บ Cloudflare)
+//
+//  วิธีใช้ (ทำครั้งแรกครั้งเดียว):
+//    1) cd /d/xeno/kistrox-hub
+//    2) npx wrangler login              <- เบราว์เซอร์เด้ง กด Allow
+//    3) npx wrangler kv namespace list  <- เอา id ของ namespace KEYS มาใส่ช่องล่าง
+//    4) npx wrangler deploy
+//    5) npx wrangler secret put ADMIN_KEY   <- พิมพ์รหัสลับแล้ว Enter
+//
+//  ครั้งต่อ ๆ ไปที่แก้โค้ด: รัน npx wrangler deploy อย่างเดียว
+//=====================================================================
+{
+  "name": "nirnim",                       // ต้องตรงกับชื่อ Worker ที่มีอยู่ (nirnim.ratchanon439990.workers.dev)
+  "main": "worker/key-worker.js",
+  "compatibility_date": "2025-09-01",
+
+  // สำคัญ: ไม่ให้ลบตัวแปร/รหัสลับที่ตั้งไว้ในหน้าเว็บ Cloudflare (เช่น ADMIN_KEY)
+  "keep_vars": true,
+
+  // ค่าธรรมดา (ไม่ลับ) — ที่เคยตั้งในหน้าเว็บ Cloudflare
+  "vars": {
+    "AD_URL": "https://uplcm.com/4/11984132",
+    "WAIT_SECONDS": "30",
+    "EXP_HOURS": "12"
+  },
+
+  // ถังเก็บคีย์ — ต้องใส่ id จริง ไม่งั้นคีย์/สคริปต์ที่เก็บไว้จะเข้าถึงไม่ได้
+  // หา id ได้จาก: npx wrangler kv namespace list  หรือหน้าเว็บ Cloudflare -> Storage & Databases -> KV
+  "kv_namespaces": [
+    { "binding": "KEYS", "id": "ใส่_KV_NAMESPACE_ID_ตรงนี้" }
+  ],
+
+  // ADMIN_KEY ไม่ใส่ที่นี่ — ใช้ "npx wrangler secret put ADMIN_KEY" เพื่อไม่ให้รหัสลับไปอยู่ในไฟล์
+  "observability": { "enabled": true }
+}

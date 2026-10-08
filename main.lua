@@ -1,16 +1,15 @@
 --=====================================================================
---  KISTROX HUB — ตัวโหลดกลาง (ตรวจแมพก่อน แล้วรันสคริปต์ที่ตรงกับแมพนั้น)
+--  KISTROX HUB — ตัวโหลดกลาง (มีระบบ Key + โหมดดูโฆษณา)
 --
---  วิธีใช้ (บรรทัดเดียวสำหรับแจก):
---     loadstring(game:HttpGet("https://raw.githubusercontent.com/<USER>/kistrox-hub/main/main.lua"))()
+--  โหมดการป้องกันก่อนรันสคริปต์ (ตั้งที่ CFG.GateMode):
+--     "key"  = ผู้ใช้ต้องไปเอาคีย์จากหน้าเว็บ (ผ่านโฆษณา) แล้วมากรอก
+--     "ad"   = เด้งไปลิงก์โฆษณา + นับถอยหลัง 10 วิ แล้วรัน (แบบเดิม)
+--     "none" = รันทันทีเมื่อกดปุ่ม
 --
---  หลักการทำงาน:
---     1) อ่าน PlaceId / GameId / ชื่อเกม ของแมพที่กำลังเล่น
---     2) เทียบกับตาราง GAMES ด้านล่าง
---     3) ถ้าเจอ -> โหลดไฟล์สคริปต์ของแมพนั้นจาก BASE_URL แล้วรัน
---     4) ถ้าไม่เจอ -> แจ้งว่าไม่รองรับ (ไม่รันอะไร)
---
---  การเพิ่มเกมใหม่: ใส่รายการใน GAMES + อัปไฟล์สคริปต์ในโฟลเดอร์ games/
+--  วิธีใช้แบบ key:
+--     1) ตั้ง CFG.KeyPage = ลิงก์หน้าเว็บขอคีย์ของคุณ
+--     2) ตั้ง CFG.KeyAPI  = endpoint ตรวจคีย์ (ดูวิธีเลือกบริการด้านล่าง)
+--     3) ถ้ายังไม่มี API ให้ใส่คีย์ทดสอบใน CFG.LocalKeys (ไว้ลองระบบ)
 --=====================================================================
 local Players = game:GetService("Players")
 local UIS     = game:GetService("UserInputService")
@@ -20,41 +19,56 @@ local LP      = Players.LocalPlayer
 -- ตั้งค่า
 --------------------------------------------------------------------
 local CFG = {
-    -- เปลี่ยน <USER> เป็นชื่อบัญชี GitHub ของคุณ
     BaseURL   = "https://raw.githubusercontent.com/ratchanon-create/KT/main/",
     Title     = "KISTROX HUB",
+
+    GateMode  = "key",                            -- "key" / "ad" / "none"
+
+    -- === โหมด key (Cloudflare Worker: ดูโฆษณา + รอ 30 วิ แล้วได้คีย์) ===
+    KeyGetAPI = "https://nirnim.ratchanon439990.workers.dev/getkey",    -- Worker ของคุณ (ดูคีย์/ดูโฆษณา)
+    KeyAPI    = "https://nirnim.ratchanon439990.workers.dev/checkkey",  -- Worker ของคุณ (ตรวจคีย์)
+    ScriptAPI = "https://nirnim.ratchanon439990.workers.dev/script",   -- ดึงโค้ดสคริปต์ (ต้องมีคีย์จริงเท่านั้น)
+    KeyAPIInPath = false,                              -- false = ส่งเป็น ?key=..&hwid=..
+    KeyGetMode   = "url",                              -- "url" = ลิงก์ที่ให้ผู้ใช้เปิด = KeyGetAPI?uid=<HWID>
+    KeyGetAPIParam = "uid",                             -- ชื่อพารามิเตอร์ที่ส่ง HWID ไป
+    KeyAPIKind = "json",                               -- Worker ตอบ {"valid":true}
+    KeyAuth   = "",        -- ใส่ถ้าต้องใช้ API key (ปกติไม่ต้อง)
+    KeyLifetimeHours = 0,                              -- 0 = ให้ Worker คุมอายุ (12 ชม.)
+    UnlimitedTestKeys = true,
+    -- (โหมดทางเลือก: Work.ink ตรงๆ — ไม่ใช้แล้ว เว้นว่างไว้)
+    KeyPage = "", KeyLink = "", OverrideURL = "", TokenPage = "",
+
+
+    -- คีย์ทดสอบในเครื่อง (ใช้ตอนยังไม่ตั้ง API)
+    LocalKeys = {
+        "TEST-1234",          -- คีย์ทดสอบ (ใช้ตอนนี้ได้เลย)
+    },
+
+    -- === โหมด ad ===
+    AdLink    = "https://uplcm.com/4/11984132",       -- ลิงก์โฆษณา
+    AdWait    = 30,                                    -- ต้องรอกี่วินาทีก่อนได้คีย์
+    LocalKeyMode = false,                              -- false = ใช้ Worker ตรวจคีย์จริง (กันบายพาส)
+
+    UseCache  = true,
     LogFile   = "kistrox_log.txt",
-    UseCache  = true,        -- จำสคริปต์ที่โหลดไว้ ครั้งต่อไปไม่ต้องโหลดซ้ำ
-    AutoRun   = true,        -- ตรวจแมพ + รันสคริปต์อัตโนมัติทันทีที่ Execute
 }
 
 --------------------------------------------------------------------
 -- ตารางแมพที่รองรับ
---   match.name    = ข้อความในชื่อเกม (ไม่ต้องตรงทั้งชื่อ ใช้แบบ "มีคำนี้")
---   match.placeId = PlaceId (ถ้ารู้) — แม่นสุด
---   match.gameId  = Universe/GameId (ถ้ารู้)
 --------------------------------------------------------------------
 local GAMES = {
     {
         label = "Anime Dice",
-        match = {
-            placeId = 113290951185459,          -- แม่นสุด (ตรงกับเกมนี้)
-            gameId  = 10708913337,
-            name    = "Anime Dice",             -- เผื่อไว้ ถ้าเกมเปลี่ยน PlaceId
-        },
-        file  = "games/anime-dice.lua",
+        match = { placeId = 113290951185459, gameId = 10708913337, name = "Anime Dice" },
+        protected = true,                  -- true = โค้ดไม่ขึ้น GitHub ดึงผ่าน Worker (ต้องมีคีย์)
+        script    = "anime-dice",          -- ชื่อใน KV: script:anime-dice
+        file  = "games/anime-dice.lua",    -- ไม่ใช้แล้วตอน protected=true (เก็บไว้เป็นที่แก้โค้ด)
     },
-    -- ตัวอย่างการเพิ่มเกมใหม่:
-    -- {
-    --     label = "Blox Fruits",
-    --     match = { placeId = 2753915549, name = "Blox Fruits" },
-    --     file  = "games/blox-fruits.lua",
-    -- },
 }
-local DEFAULT_FILE = nil    -- ถ้าไม่เจอแมพใดเลย จะรันไฟล์นี้ (nil = ไม่รัน)
+local DEFAULT_FILE = nil
 
 --------------------------------------------------------------------
--- log
+-- log + status
 --------------------------------------------------------------------
 writefile(CFG.LogFile, "")
 local function log(...)
@@ -64,15 +78,14 @@ local function log(...)
     print("[KISTROX] " .. table.concat(parts, "  |  "))
 end
 
--- status ต้องประกาศก่อน เพราะ runFor เรียกใช้
-local gui, statusLabel
+local gui, statusLabel, countLabel, keyBox, keyBtn, confirmBtn
 local function setStatus(t)
     if statusLabel then statusLabel.Text = t end
     log(t)
 end
 
 --------------------------------------------------------------------
--- ตรวจแมพปัจจุบัน
+-- ตรวจแมพ
 --------------------------------------------------------------------
 local function gameName()
     local ok, info = pcall(function()
@@ -83,14 +96,13 @@ local function gameName()
 end
 
 local function detect()
-    local placeId = game.PlaceId
-    local gameId  = game.GameId
-    local name    = gameName()
+    local placeId, gameId, name = game.PlaceId, game.GameId, gameName()
     log("ตรวจแมพ: PlaceId =", placeId, "| GameId =", gameId, "| ชื่อ =", name)
     for _, g in ipairs(GAMES) do
         local m = g.match or {}
-        if m.placeId and placeId == m.placeId then return g, name end
-        if m.gameId and gameId == m.gameId then return g, name end
+        if (m.placeId and placeId == m.placeId) or (m.gameId and gameId == m.gameId) then
+            return g, name
+        end
     end
     if name ~= "" then
         local lower = name:lower()
@@ -103,18 +115,97 @@ local function detect()
 end
 
 --------------------------------------------------------------------
--- โหลด + รันสคริปต์ของแมพนั้น
+-- เปิด/คัดลอกลิงก์
 --------------------------------------------------------------------
-local function looksLikeCode(code)
-	if type(code) ~= "string" or #code < 100 then return false end
-	if code:find("^<!DOCTYPE", 1, true) then return false end
-	if code:find("404: Not Found", 1, true) then return false end
-	if code:find("<html", 1, true) then return false end
-	return true
+local OPENERS = {
+    { name = "GuiService:OpenBrowserWindow", fn = function(u)
+        game:GetService("GuiService"):OpenBrowserWindow(u)
+    end },
+    { name = "openbrowser()", fn = function(u) openbrowser(u) end },
+    { name = "open_url()",    fn = function(u) open_url(u) end },
+    { name = "openurl()",     fn = function(u) openurl(u) end },
+    { name = "request()",     fn = function(u) request({ Url = u, Method = "GET" }) end },
+}
+
+local function openLink(url)
+    for _, o in ipairs(OPENERS) do
+        local ok, err = pcall(o.fn, url)
+        if ok then
+            log("เด้งไปลิงก์ด้วย " .. o.name .. " สำเร็จ")
+            return true, o.name
+        end
+        log("ใช้ " .. o.name .. " ไม่ได้:", tostring(err):sub(1, 90))
+    end
+    if setclipboard then
+        pcall(setclipboard, url)
+        log("คัดลอกลิงก์ไปคลิปบอร์ดแล้ว:", url)
+    end
+    return false, "clipboard"
 end
 
-local function fetch(url)
-    if CFG.UseCache then
+--------------------------------------------------------------------
+-- HWID (ใช้ผูกคีย์กับเครื่อง)
+--------------------------------------------------------------------
+local function getHWID()
+    local ok, id = pcall(function()
+        return game:GetService("RbxAnalyticsService"):GetClientId()
+    end)
+    if ok and type(id) == "string" and #id > 0 then return id end
+    if gethwid then
+        local ok2, id2 = pcall(gethwid)
+        if ok2 and type(id2) == "string" then return id2 end
+    end
+    return tostring(LP.UserId)   -- สำรอง
+end
+
+--------------------------------------------------------------------
+-- HTTP ที่ใส่ header ได้ (Work.ink ต้องใช้ Authorization: Bearer ...)
+--------------------------------------------------------------------
+local function httpGetJson(url, headers)
+    -- 1) request ของ executor (Xeno มี)
+    if request then
+        local ok, res = pcall(request, { Url = url, Method = "GET", Headers = headers or {} })
+        if ok and type(res) == "table" and res.Body then return tostring(res.Body) end
+    end
+    -- 2) syn.request / http_request
+    if syn and syn.request then
+        local ok, res = pcall(syn.request, { Url = url, Method = "GET", Headers = headers or {} })
+        if ok and type(res) == "table" and res.Body then return tostring(res.Body) end
+    end
+    if http_request then
+        local ok, res = pcall(http_request, { Url = url, Method = "GET", Headers = headers or {} })
+        if ok and type(res) == "table" and res.Body then return tostring(res.Body) end
+    end
+    -- 3) สำรอง: HttpGet ธรรมดา (ใส่ header ไม่ได้)
+    local ok, body = pcall(function() return game:HttpGet(url) end)
+    if ok then return tostring(body) end
+    return nil, tostring(body)
+end
+
+--------------------------------------------------------------------
+-- โหลดสคริปต์
+--------------------------------------------------------------------
+-- เข้ารหัส URL (ใช้ encodeURL ของ executor ถ้ามี)
+local function urlEncode(str)
+    if encodeURL then
+        local ok, res = pcall(encodeURL, str)
+        if ok and type(res) == "string" then return res end
+    end
+    return (tostring(str):gsub("[^%w%-%.%_%~]", function(c)
+        return string.format("%%%02X", string.byte(c))
+    end))
+end
+
+local function looksLikeCode(code)
+    if type(code) ~= "string" or #code < 100 then return false end
+    if code:find("^<!DOCTYPE", 1, true) then return false end
+    if code:find("404: Not Found", 1, true) then return false end
+    if code:find("<html", 1, true) then return false end
+    return true
+end
+
+local function fetch(url, noCache)
+    if CFG.UseCache and not noCache then
         local cacheName = "kistrox_cache_" .. tostring(game.PlaceId) .. ".lua"
         if isfile and isfile(cacheName) then
             local ok, data = pcall(readfile, cacheName)
@@ -135,26 +226,45 @@ local function fetch(url)
     return code
 end
 
-local function runFor(g)
-    setStatus("ตรวจพบแมพ: " .. g.label .. " -- กำลังโหลดสคริปต์...")
+-- ดึงสคริปต์ที่ป้องกันไว้: ต้องมีคีย์จริง + เครื่องตรง ไม่งั้น Worker ไม่คืนโค้ด
+local function fetchProtected(g, key)
+    if CFG.ScriptAPI == "" then
+        return nil, "ยังไม่ได้ตั้ง CFG.ScriptAPI"
+    end
+    local url = CFG.ScriptAPI
+        .. "?key=" .. urlEncode(key or "")
+        .. "&hwid=" .. urlEncode(getHWID())
+        .. "&name=" .. urlEncode(g.script or "")
+    log("ขอดึงสคริปต์แบบมีคีย์:", tostring(g.script))
+    local code, err = fetch(url, true)   -- ห้าม cache: ไม่ให้โค้ดค้างอยู่ในเครื่อง
+    if not code then return nil, tostring(err) end
+    if looksLikeCode(code) then return code end
+    -- ที่ได้ไม่ใช่โค้ด = คีย์ไม่ผ่าน -> ดึงเหตุผลจาก JSON มาโชว์
+    return nil, (code:match('"reason"%s*:%s*"([^"]+)"') or "คีย์ไม่ผ่านหรือไม่มีสิทธิ์โหลดสคริปต์")
+end
 
-    -- ลอง path ที่ตั้งไว้ก่อน ถ้าไม่ได้ลองชื่อไฟล์ที่วางไว้ที่ root (เผื่ออัปโหลดแล้วโฟลเดอร์หาย)
-    local tries = { g.file }
-    local base = g.file:match("([^/]+)$")
-    if base and base ~= g.file then tries[#tries + 1] = base end
-
+local function runFor(g, key)
     local code, lastErr
-    for _, rel in ipairs(tries) do
-        local url = CFG.BaseURL .. rel
-        log("กำลังโหลดสคริปต์ของแมพ:", g.label, "->", url)
-        code, lastErr = fetch(url)
-        if code then break end
+    if g.protected and g.script then
+        code, lastErr = fetchProtected(g, key)
+    else
+        local tries = { g.file }
+        local base = g.file:match("([^/]+)$")
+        if base and base ~= g.file then tries[#tries + 1] = base end
+        for _, rel in ipairs(tries) do
+            local url = CFG.BaseURL .. rel
+            log("กำลังโหลดสคริปต์ของแมพ:", g.label, "->", url)
+            code, lastErr = fetch(url)
+            if code then break end
+        end
     end
     if not code then
         log("โหลดสคริปต์ไม่สำเร็จ:", tostring(lastErr))
-        setStatus("โหลดสคริปต์ไม่สำเร็จ -- เช็ค BaseURL / ชื่อไฟล์ใน repo (ดู log)")
+        setStatus("โหลดสคริปต์ไม่สำเร็จ -- " .. tostring(lastErr))
+        if countLabel then countLabel.Text = "" end
         return false
     end
+
     local fn, cerr = loadstring(code, g.label)
     if not fn then
         log("คอมไพล์ไม่สำเร็จ:", tostring(cerr))
@@ -163,6 +273,7 @@ local function runFor(g)
     end
     log("รันสคริปต์แมพ:", g.label, "| ขนาด", #code, "ตัวอักษร")
     setStatus("รันสคริปต์: " .. g.label)
+    if countLabel then countLabel.Text = "พร้อมใช้งาน" end
     local ok, rerr = pcall(fn)
     if not ok then
         log("รันแล้ว error:", tostring(rerr))
@@ -173,8 +284,307 @@ local function runFor(g)
 end
 
 --------------------------------------------------------------------
--- UI เล็กๆ (สถานะ + ปุ่มรัน/ปิด)
+local verified = false
+
+-- อายุคีย์ (ชั่วโมง) — จำเวลาที่คีย์ถูกใช้ครั้งแรกไว้ในเครื่อง
 --------------------------------------------------------------------
+local KEYSTATE = "kistrox_keyinfo.txt"
+
+local function keyStateText()
+    if not (isfile and isfile(KEYSTATE)) then return "(ไม่มีไฟล์)" end
+    local ok, d = pcall(readfile, KEYSTATE)
+    if not ok or type(d) ~= "string" then return "(อ่านไม่ได้)" end
+    return (tostring(d):gsub("\n", " / "))
+end
+
+local function readKeyState()
+    if not (isfile and isfile(KEYSTATE)) then return nil end
+    local ok, data = pcall(readfile, KEYSTATE)
+    if not ok or type(data) ~= "string" then return nil end
+    local k, t = data:match("^(.-)\n(%d+)$")
+    if k and t then return k, tonumber(t) end
+    return nil
+end
+
+local function writeKeyState(k, t)
+    pcall(function() writefile(KEYSTATE, tostring(k) .. "\n" .. tostring(t)) end)
+end
+
+-- คืนค่า: (ผ่านไหม, ข้อความ)
+local function checkLifetime(key)
+    local hrs = tonumber(CFG.KeyLifetimeHours) or 0
+    if hrs <= 0 then return true, "ไม่จำกัดเวลา" end
+    local savedKey, firstUse = readKeyState()
+    if savedKey == key and firstUse then
+        local left = hrs * 3600 - (os.time() - firstUse)
+        if left <= 0 then
+            return false, ("คีย์นี้ใช้ครบ %d ชั่วโมงแล้ว -- ไปเอาคีย์ใหม่จากหน้าเว็บ"):format(hrs)
+        end
+        return true, ("เหลือเวลา %d ชม. %d นาที"):format(math.floor(left / 3600), math.floor((left % 3600) / 60))
+    end
+    writeKeyState(key, os.time())
+    return true, ("เริ่มจับเวลาใหม่ %d ชั่วโมง"):format(hrs)
+end
+
+-- เรียกเมื่อคีย์ผ่าน: ตรวจอายุ + คืนสถานะ
+local function passKey(key, extraText, skipLifetime)
+    local msg
+    if skipLifetime then
+        msg = "คีย์ทดสอบ (ไม่จับเวลา)"
+    else
+        local okLife
+        okLife, msg = checkLifetime(key)
+        if not okLife then
+            verified = false
+            setStatus(msg)
+            return false
+        end
+    end
+    verified = true
+    setStatus("คีย์ถูกต้อง" .. (extraText and (" (" .. extraText .. ")") or "") .. " | " .. msg .. " -- กำลังรันสคริปต์")
+    return true
+end
+
+local localKey = nil          -- คีย์ที่สร้างหลังดูโฆษณาครบ (โหมดในเครื่อง)
+
+--------------------------------------------------------------------
+-- ตรวจคีย์
+--------------------------------------------------------------------
+
+local function verifyKey(key, silent)
+    key = tostring(key or ""):gsub("%s", "")
+    if #key < 4 then
+        if not silent then setStatus("กรุณาวางคีย์ก่อน (คัดลอกจากหน้าเว็บขอคีย์)") end
+        return false
+    end
+
+    -- 1) คีย์ทดสอบในเครื่อง
+    for _, k in ipairs(CFG.LocalKeys or {}) do
+        if k == key then
+            pcall(function() writefile(KEYSTATE, "") end)   -- ล้างเวลาที่จำไว้
+            return passKey(key, "จากรายการทดสอบ", CFG.UnlimitedTestKeys)
+        end
+    end
+
+    -- 1.5) โหมดคีย์ในเครื่อง (สร้างหลังดูโฆษณาครบ)
+    if CFG.LocalKeyMode then
+        if localKey and key == localKey then
+            return passKey(key, "คีย์ในเครื่อง", true)
+        end
+        if not silent then
+            setStatus("คีย์ไม่ถูกต้อง -- กดปุ่ม เปิดโฆษณา + รับคีย์ เพื่อรับคีย์ก่อน")
+        end
+        return false
+    end
+
+    -- 2) ตรวจผ่าน API (Worker ของเรา)
+    if CFG.KeyAPI ~= "" then
+        local url
+        if CFG.KeyAPIInPath then
+            url = CFG.KeyAPI .. urlEncode(key)
+        else
+            url = CFG.KeyAPI .. "?key=" .. urlEncode(key) .. "&hwid=" .. urlEncode(getHWID())
+        end
+        local headers = {}
+        if CFG.KeyAuth and CFG.KeyAuth ~= "" and not CFG.KeyAuth:find("PASTE_") then
+            headers["Authorization"] = CFG.KeyAuth
+            headers["Content-Type"] = "application/json"
+        end
+        log("ตรวจคีย์กับ Server:", url)
+        local body, err = httpGetJson(url, headers)
+        if not body then
+            if not silent then setStatus("เชื่อมต่อ API ไม่ได้: " .. tostring(err):sub(1, 80)) end
+            return false
+        end
+        log("คำตอบจาก API:", tostring(body):sub(1, 200))
+
+        local low = tostring(body):lower()
+        local pass
+        if CFG.KeyAPIKind == "json" then
+            pass = low:find('"valid"%s*:%s*true') ~= nil
+                or low:find('"success"%s*:%s*true') ~= nil
+                or low:find('"ok"%s*:%s*true') ~= nil
+        else
+            pass = low:find("valid") ~= nil or low:find("success") ~= nil
+                or low:find("true") ~= nil or low:find("ok") ~= nil
+        end
+
+        if pass then
+            return passKey(key, "คีย์จากเว็บ")
+        end
+        local why = tostring(body):sub(1, 120)
+        if not silent then
+            setStatus("คีย์ไม่ถูกต้อง/หมดอายุ (" .. why .. ") -- ไปเอาคีย์ใหม่จากหน้าเว็บ")
+        end
+        return false
+    end
+
+    if not silent then
+        setStatus("ยังไม่ได้ตั้งค่า KeyAPI (ให้ใส่ CFG.KeyAPI หรือ CFG.LocalKeys)")
+    end
+    return false
+end
+
+--------------------------------------------------------------------
+-- ขอลิงก์เฉพาะตัวจาก Worker (/getlink?uid=<hwid>)
+--------------------------------------------------------------------
+local function fetchPersonalLink(cb)
+    -- โหมด url: ลิงก์ = <worker>/getkey?uid=<HWID> (ผู้ใช้เปิดในเบราว์เซอร์เอง)
+    if CFG.KeyGetMode == "url" and CFG.KeyGetAPI ~= "" then
+        cb(CFG.KeyGetAPI .. "?" .. (CFG.KeyGetAPIParam or "uid") .. "=" .. getHWID())
+        return
+    end
+
+    -- ทางที่ 1: มี Worker -> ใช้ Worker (แนะนำถ้ามี)
+    if CFG.KeyGetAPI == "" and CFG.OverrideURL == "" then
+        cb(nil, "ยังไม่ได้ตั้ง OverrideURL / KeyGetAPI")
+        return
+    end
+    if CFG.KeyGetAPI ~= "" then
+        -- ... ใช้ Worker ตามด้านล่าง
+    else
+        -- ทางที่ 2: เรียก Override API ของ Work.ink เอง แล้วให้ผู้ใช้เอาโค้ดจากหน้าเว็บมากรอก
+        local dest = CFG.TokenPage .. "?token={TOKEN}&uid=" .. getHWID()
+        local url = CFG.OverrideURL .. "?destination=" .. urlEncode(dest)
+        log("ขอ sr จาก Work.ink:", url)
+        task.spawn(function()
+            local body = httpGetJson(url, {})
+            if not body then
+                cb(nil, "เชื่อมต่อ Work.ink ไม่ได้")
+                return
+            end
+            log("คำตอบ override:", tostring(body):sub(1, 200))
+            local sr = tostring(body):match('"sr"%s*:%s*"(.-)"')
+            if not sr then
+                cb(nil, "Work.ink ตอบ: " .. tostring(body):sub(1, 140))
+                return
+            end
+            cb(CFG.KeyLink .. "?sr=" .. sr)
+        end)
+        return
+    end
+    local url = CFG.KeyGetAPI .. "?uid=" .. getHWID()
+    log("ขอลิงก์เฉพาะตัว:", url)
+    task.spawn(function()
+        local body = httpGetJson(url, {})
+        if not body then
+            cb(nil, "เชื่อมต่อ Worker ไม่ได้")
+            return
+        end
+        log("คำตอบจาก Worker:", tostring(body):sub(1, 160))
+        local link = tostring(body):match('"link"%s*:%s*"(.-)"')
+        if link then
+            cb(link)
+        else
+            cb(nil, "Worker ตอบ: " .. tostring(body):sub(1, 120))
+        end
+    end)
+end
+
+--------------------------------------------------------------------
+-- ขั้นตอนรวม: ตรวจคีย์ -> รันสคริปต์
+--------------------------------------------------------------------
+local gating, confirmed = false, false
+
+local function makeLocalKey()
+    local chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    local function part(n)
+        local t = {}
+        for i = 1, n do
+            local k = math.random(1, #chars)
+            t[i] = chars:sub(k, k)
+        end
+        return table.concat(t)
+    end
+    return ("KISTROX-%s-%s-%s"):format(part(5), part(5), part(5))
+end
+
+-- กด -> เปิดโฆษณา -> นับถอยหลัง -> คีย์โผล่
+local function startAdGate()
+    if gating then return end
+    gating = true
+    local opened = openLink(CFG.AdLink)
+    if setclipboard then pcall(setclipboard, CFG.AdLink) end
+    setStatus(opened and "เปิดโฆษณาแล้ว -- ดูให้ครบก่อนนะ" or "เปิดอัตโนมัติไม่ได้ -- คัดลอกลิงก์ให้แล้ว เปิดในเบราว์เซอร์ได้เลย")
+
+    for i = CFG.AdWait, 1, -1 do
+        if countLabel then countLabel.Text = ("กรุณารออีก %d วินาที..."):format(i) end
+        task.wait(1)
+    end
+
+    localKey = makeLocalKey()
+    if keyBox then keyBox.Text = localKey end
+    if setclipboard then pcall(setclipboard, localKey) end
+    if countLabel then countLabel.Text = "คีย์ของคุณ: " .. localKey end
+    setStatus("ได้คีย์แล้ว (คัดลอกอัตโนมัติ) -- กด ยืนยันคีย์ + รันสคริปต์ เพื่อเริ่มใช้งาน")
+    gating = false
+end
+local detected, detectedName = nil, ""
+
+local function startFlow()
+    local g = detected or (DEFAULT_FILE and { label = "default", file = DEFAULT_FILE } or nil)
+    if not g then
+        setStatus("แมพนี้ยังไม่รองรับ -- กด 'ข้อมูลแมพนี้' เพื่อดู PlaceId แล้วแจ้งเพิ่ม")
+        return
+    end
+    if gating then return end
+    gating, confirmed = true, false
+    local usedKey = ""      -- คีย์ที่ผ่านแล้ว เอาไปใช้ขอดึงโค้ดสคริปต์
+
+    if CFG.GateMode == "key" then
+        -- ตรวจคีย์ที่ผู้ใช้กรอกก่อน
+        local key = keyBox and keyBox.Text or ""
+        if not verifyKey(key) then
+            gating = false
+            return
+        end
+        usedKey = key
+
+    elseif CFG.GateMode == "ad" then
+        local opened, how = openLink(CFG.AdLink)
+        if not opened then
+            setStatus("เปิดเบราว์เซอร์อัตโนมัติไม่ได้ -- กดปุ่ม 'เปิดลิงก์ / ไปต่อ' ด้านล่างก่อน")
+            if confirmBtn then confirmBtn.Visible = true end
+            local t0 = os.clock()
+            while gating and not confirmed and (os.clock() - t0) < 180 do task.wait(0.2) end
+            if confirmBtn then confirmBtn.Visible = false end
+            if not gating then return end
+            if not confirmed then
+                setStatus("ยังไม่ได้เปิดลิงก์ -- ยกเลิกการรัน")
+                gating = false
+                return
+            end
+        else
+            setStatus("เด้งไปลิงก์แล้ว (" .. tostring(how) .. ") -- กรุณารอตามเวลาด้านล่าง")
+        end
+        for i = CFG.AdWait, 1, -1 do
+            if countLabel then countLabel.Text = ("กรุณารออีก %d วินาที..."):format(i) end
+            task.wait(1)
+        end
+    end
+
+    if countLabel then countLabel.Text = "กำลังโหลดสคริปต์..." end
+    runFor(g, usedKey)
+    gating = false
+end
+
+--------------------------------------------------------------------
+-- UI
+--------------------------------------------------------------------
+local function mkButton(parent, txt, x, y, w, h, color, txtColor, textSize)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, w, 0, h)
+    b.Position = UDim2.new(0, x, 0, y)
+    b.BackgroundColor3 = color
+    b.Text = txt
+    b.TextColor3 = txtColor or Color3.fromRGB(255, 255, 255)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = textSize or 12
+    b.Parent = parent
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+    return b
+end
+
 local function buildUI()
     gui = Instance.new("ScreenGui")
     gui.Name = "KISTROX_Loader"
@@ -182,8 +592,8 @@ local function buildUI()
     gui.Parent = LP:WaitForChild("PlayerGui")
 
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(0, 300, 0, 108)
-    f.Position = UDim2.new(0, 24, 0, 96)
+    f.Size = UDim2.new(0, 350, 0, 260)
+    f.Position = UDim2.new(0, 24, 0, 90)
     f.BackgroundColor3 = Color3.fromRGB(11, 14, 18)
     f.BorderSizePixel = 0
     f.Active = true
@@ -225,8 +635,8 @@ local function buildUI()
     Instance.new("UICorner", close).CornerRadius = UDim.new(0, 6)
 
     statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(1, -24, 0, 32)
-    statusLabel.Position = UDim2.new(0, 12, 0, 36)
+    statusLabel.Size = UDim2.new(1, -24, 0, 44)
+    statusLabel.Position = UDim2.new(0, 12, 0, 34)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Text = "กำลังตรวจแมพ..."
     statusLabel.TextColor3 = Color3.fromRGB(124, 139, 153)
@@ -236,37 +646,63 @@ local function buildUI()
     statusLabel.TextXAlignment = Enum.TextXAlignment.Left
     statusLabel.Parent = f
 
-    local runBtn = Instance.new("TextButton")
-    runBtn.Size = UDim2.new(0, 130, 0, 26)
-    runBtn.Position = UDim2.new(0, 12, 0, 72)
-    runBtn.BackgroundColor3 = Color3.fromRGB(34, 211, 238)
-    runBtn.Text = "▶  รันสคริปต์แมพนี้"
-    runBtn.TextColor3 = Color3.fromRGB(10, 20, 26)
-    runBtn.Font = Enum.Font.GothamBold
-    runBtn.TextSize = 12
-    runBtn.Parent = f
-    Instance.new("UICorner", runBtn).CornerRadius = UDim.new(0, 8)
+    countLabel = Instance.new("TextLabel")
+    countLabel.Size = UDim2.new(1, -24, 0, 22)
+    countLabel.Position = UDim2.new(0, 12, 0, 78)
+    countLabel.BackgroundTransparency = 1
+    countLabel.Text = ""
+    countLabel.TextColor3 = Color3.fromRGB(34, 211, 238)
+    countLabel.Font = Enum.Font.GothamBold
+    countLabel.TextSize = 14
+    countLabel.TextXAlignment = Enum.TextXAlignment.Left
+    countLabel.Parent = f
 
-    local logBtn = Instance.new("TextButton")
-    logBtn.Size = UDim2.new(0, 130, 0, 26)
-    logBtn.Position = UDim2.new(1, -142, 0, 72)
-    logBtn.BackgroundColor3 = Color3.fromRGB(26, 31, 39)
-    logBtn.Text = "ข้อมูลแมพนี้"
-    logBtn.TextColor3 = Color3.fromRGB(230, 238, 245)
-    logBtn.Font = Enum.Font.Gotham
-    logBtn.TextSize = 12
-    logBtn.Parent = f
-    Instance.new("UICorner", logBtn).CornerRadius = UDim.new(0, 8)
+    -- แถวขอคีย์
+    local linkBox = Instance.new("TextBox")
+    linkBox.Size = UDim2.new(1, -24, 0, 22)
+    linkBox.Position = UDim2.new(0, 12, 0, 104)
+    linkBox.BackgroundColor3 = Color3.fromRGB(20, 24, 31)
+    linkBox.TextColor3 = Color3.fromRGB(150, 190, 210)
+    linkBox.Font = Enum.Font.Code
+    linkBox.TextSize = 10
+    linkBox.Text = (CFG.KeyGetAPI ~= "" and (CFG.KeyGetAPI .. "?" .. (CFG.KeyGetAPIParam or "uid") .. "=" .. getHWID()))
+        or tostring(CFG.KeyPage or CFG.KeyLink or "")
+    linkBox.TextEditable = false
+    linkBox.ClearTextOnFocus = false
+    linkBox.Parent = f
+    Instance.new("UICorner", linkBox).CornerRadius = UDim.new(0, 6)
 
+    local copyLink = mkButton(f, "เปิดโฆษณา + รับคีย์", 12, 130, 208, 26, Color3.fromRGB(34, 211, 238), Color3.fromRGB(10, 20, 26), 12)
+    local openLinkBtn = mkButton(f, "ขอคีย์ใหม่ (ดูโฆษณา)", 226, 130, 111, 26, Color3.fromRGB(26, 31, 39), nil, 10)
+
+    keyBox = Instance.new("TextBox")
+    keyBox.Size = UDim2.new(1, -24, 0, 28)
+    keyBox.Position = UDim2.new(0, 12, 0, 164)
+    keyBox.BackgroundColor3 = Color3.fromRGB(20, 24, 31)
+    keyBox.TextColor3 = Color3.fromRGB(230, 238, 245)
+    keyBox.PlaceholderText = "วางคีย์ที่นี่ (Get Key จากเว็บ)"
+    keyBox.PlaceholderColor3 = Color3.fromRGB(110, 125, 140)
+    keyBox.Font = Enum.Font.Code
+    keyBox.TextSize = 12
+    keyBox.Text = ""
+    keyBox.ClearTextOnFocus = false
+    keyBox.Parent = f
+    Instance.new("UICorner", keyBox).CornerRadius = UDim.new(0, 7)
+
+    keyBtn = mkButton(f, "ยืนยันคีย์ + รันสคริปต์", 12, 198, 326, 30, Color3.fromRGB(34, 211, 238), Color3.fromRGB(10, 20, 26), 13)
+
+    confirmBtn = mkButton(f, "เปิดลิงก์ / ไปต่อ", 12, 198, 326, 30, Color3.fromRGB(255, 170, 60), Color3.fromRGB(30, 20, 5), 12)
+    confirmBtn.Visible = false
+
+    -- ลากหน้าต่าง
     bar.InputBegan:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1
             or i.UserInputType == Enum.UserInputType.Touch then
             local dragging, start, sp = true, i.Position, f.Position
-            local c = i.Changed:Connect(function()
-                if i.UserInputState == Enum.UserInputState.End then dragging = false c:Disconnect() end
+            i.Changed:Connect(function()
+                if i.UserInputState == Enum.UserInputState.End then dragging = false end
             end)
-            local cc
-            cc = UIS.InputChanged:Connect(function(m)
+            UIS.InputChanged:Connect(function(m)
                 if dragging and (m.UserInputType == Enum.UserInputType.MouseMovement
                     or m.UserInputType == Enum.UserInputType.Touch) then
                     local d = m.Position - start
@@ -276,42 +712,78 @@ local function buildUI()
         end
     end)
 
-    local detected, gname = detect()
+    detected, detectedName = detect()
     local info = ("PlaceId %d | GameId %d | %s"):format(game.PlaceId, game.GameId,
-        (gname ~= "" and gname or "ไม่ทราบชื่อ"))
+        (detectedName ~= "" and detectedName or "ไม่ทราบชื่อ"))
+
     if detected then
-        setStatus("ตรวจพบแมพที่รองรับ: " .. detected.label)
+        if CFG.GateMode == "key" then
+            setStatus("ตรวจพบแมพ: " .. detected.label ..
+                " -- กด เปิดโฆษณา + รับคีย์ ไปเอาโค้ดจากหน้าเว็บ (ดูโฆษณา " .. CFG.AdWait .. " วิ) แล้วมากรอก")
+        else
+            setStatus("ตรวจพบแมพ: " .. detected.label .. " -- กดปุ่มด้านล่างเพื่อเริ่ม")
+        end
     else
-        setStatus("ไม่พบแมพนี้ในรายการที่รองรับ (กด 'ข้อมูลแมพนี้' เพื่อดู PlaceId)")
+        setStatus("ไม่พบแมพนี้ในรายการที่รองรับ (PlaceId: " .. game.PlaceId .. ")")
     end
 
-    runBtn.MouseButton1Click:Connect(function()
-        local g = detected or (DEFAULT_FILE and { label = "default", file = DEFAULT_FILE } or nil)
-        if not g then
-            setStatus("แมพนี้ยังไม่รองรับ — ส่ง PlaceId ให้แอดมินเพิ่ม")
+    copyLink.MouseButton1Click:Connect(function()
+        if CFG.LocalKeyMode then
+            task.spawn(startAdGate)
             return
         end
-        task.spawn(function() runFor(g) end)
+        if CFG.KeyGetAPI ~= "" then
+            setStatus("กำลังขอลิงก์เฉพาะตัวจาก Worker...")
+            fetchPersonalLink(function(link, err)
+                if not link then
+                    if setclipboard then pcall(setclipboard, tostring(CFG.KeyPage or CFG.KeyLink or "")) end
+                    setStatus("ขออัตโนมัติไม่สำเร็จ (" .. tostring(err) .. ") -- คัดลอกลิงก์ปกติให้แล้ว")
+                    return
+                end
+                linkBox.Text = link
+                if setclipboard then pcall(setclipboard, link) end
+                openLink(link)
+                setStatus("คัดลอกลิงก์เฉพาะตัวแล้ว -- ทำโฆษณาให้ครบ แล้วเอาโค้ดจากหน้าเว็บมากรอก")
+            end)
+        else
+            if setclipboard then pcall(setclipboard, tostring(CFG.KeyPage or CFG.KeyLink or "")) end
+            setStatus("คัดลอกลิงก์ขอคีย์แล้ว: " .. tostring(CFG.KeyPage or CFG.KeyLink or ""))
+        end
     end)
-    logBtn.MouseButton1Click:Connect(function()
-        setStatus(info)
+    openLinkBtn.MouseButton1Click:Connect(function()
+        if CFG.LocalKeyMode then
+            task.spawn(startAdGate)
+            return
+        end
+        if CFG.KeyGetAPI ~= "" then
+            local link = CFG.KeyGetAPI .. "?" .. (CFG.KeyGetAPIParam or "uid") .. "=" .. getHWID()
+            linkBox.Text = link
+            if setclipboard then pcall(setclipboard, link) end
+            local ok = openLink(link)
+            setStatus(ok and "เปิดหน้าเว็บขอคีย์แล้ว -- ดูโฆษณาให้ครบ 30 วิ แล้วคัดลอกคีย์มากรอก"
+                or "เปิดอัตโนมัติไม่ได้ -- คัดลอกลิงก์ให้แล้ว เอาไปวางในเบราว์เซอร์")
+            return
+        end
+        local ok = openLink(CFG.AdLink)
+        if setclipboard then pcall(setclipboard, CFG.AdLink) end
+        setStatus(ok and "เปิดโฆษณาแล้ว (คัดลอกลิงก์ให้ด้วย)" or "เปิดอัตโนมัติไม่ได้ -- คัดลอกลิงก์ให้แล้ว เอาไปวางในเบราว์เซอร์")
+    end)
+    keyBtn.MouseButton1Click:Connect(function()
+        if gating then return end
+        task.spawn(startFlow)
+    end)
+    confirmBtn.MouseButton1Click:Connect(function()
+        openLink(CFG.AdLink)
+        if setclipboard then pcall(setclipboard, CFG.AdLink) end
+        confirmed = true
     end)
     close.MouseButton1Click:Connect(function()
         if gui then gui:Destroy() end
     end)
 end
 
---------------------------------------------------------------------
 buildUI()
-if CFG.AutoRun then
-    task.spawn(function()
-        task.wait(1)
-        local g = detect()
-        if g then
-            runFor(g)
-        else
-            setStatus("แมพนี้ยังไม่รองรับ (กด 'ข้อมูลแมพนี้' เพื่อดู PlaceId แล้วแจ้งเพิ่ม)")
-        end
-    end)
-end
-log("KISTROX HUB พร้อมใช้งาน | PlaceId =", game.PlaceId)
+log("Config: GateMode =", CFG.GateMode, "| LocalKeys =", tostring(#(CFG.LocalKeys or {})),
+    "| KeyAPI =", (CFG.KeyAPI ~= "" and CFG.KeyAPI or "(ว่าง)"), "| KeyLifetimeHours =", tostring(CFG.KeyLifetimeHours))
+log("สถานะคีย์ที่จำไว้:", keyStateText())
+log("KISTROX HUB พร้อม | GateMode =", CFG.GateMode, "| PlaceId =", game.PlaceId)

@@ -1,0 +1,123 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KISTROX HUB — รับคีย์</title>
+<style>
+ :root{--accent:#22d3ee;--bg:#0b0e12;--card:#14181f;--line:#1e2530;--text:#e6eef5;--sub:#8ea3b5}
+ *{box-sizing:border-box}
+ body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+      font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      display:flex;align-items:center;justify-content:center;padding:18px}
+ .card{background:var(--card);border:1px solid #22d3ee55;border-radius:18px;
+       padding:26px;max-width:560px;width:100%;box-shadow:0 12px 40px #0006}
+ .brand{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+ .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+ h1{font-size:19px;margin:0}
+ p{color:var(--sub);font-size:14px;line-height:1.6;margin:8px 0}
+ .box{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center;
+      font-family:ui-monospace,Consolas,monospace;font-size:19px;letter-spacing:1.5px;word-break:break-all;margin:16px 0}
+ button{width:100%;border:0;border-radius:11px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:.15s}
+ .primary{background:var(--accent);color:#0a141a}
+ .primary:hover{filter:brightness(1.08)}
+ .ghost{background:#1a1f27;color:var(--text);border:1px solid var(--line)}
+ .timer{font-size:34px;font-weight:800;color:var(--accent);text-align:center;margin:18px 0 6px;
+        font-variant-numeric:tabular-nums}
+ .steps{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+ b{color:var(--text);font-weight:600}
+ code{background:#0b0e12;border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:12px}
+ .warn{color:#ffb86b;font-size:12.5px}
+ .hide{display:none}
+</style></head><body>
+<div class="card">
+  <div class="brand"><span class="dot"></span><h1>KISTROX HUB</h1></div>
+
+  <div id="step1">
+    <p><b>ขั้นที่ 1:</b> กดปุ่มด้านล่างเพื่อเปิดโฆษณา (จะเปิดแท็บใหม่)</p>
+    <button class="primary" id="adBtn">เปิดโฆษณา / ดูโฆษณา</button>
+    <div class="steps"><p class="warn">ต้องดูโฆษณาให้ครบก่อน จึงจะได้คีย์ (ระบบจะนับเวลา 30 วินาที)</p></div>
+  </div>
+
+  <div id="step2" class="hide">
+    <p><b>ขั้นที่ 2:</b> กำลังนับเวลา — กรุณาอย่าปิดหน้านี้</p>
+    <div class="timer" id="timer">30</div>
+    <p id="hint" class="warn">รอให้ครบค่อยกดรับคีย์</p>
+  </div>
+
+  <div id="step3" class="hide">
+    <p>ได้คีย์แล้ว ✅ คัดลอกไปวางในหน้าต่าง KISTROX HUB ในเกม</p>
+    <div class="box" id="key">…</div>
+    <button class="primary" id="copy">คัดลอกคีย์</button>
+    <div class="steps">
+      <p><b>วิธีใช้:</b> คัดลอกคีย์ → เข้าเกม → วางในช่อง <code>วางคีย์ที่นี่</code> → กด <b>ยืนยันคีย์ + รันสคริปต์</b></p>
+      <p class="warn" id="note"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const UID = "test";
+  const AD  = "https://uplcm.com/4/11984132";
+  const WAIT = 30;
+  const $ = (id) => document.getElementById(id);
+  const show = (n) => { ["step1","step2","step3"].forEach((s,i)=> $(s).classList.toggle("hide", i !== n-1)); };
+
+  let tick = null;
+  function startCountdown(left) {
+    show(2);
+    let t = left;
+    $("timer").textContent = t;
+    clearInterval(tick);
+    tick = setInterval(() => {
+      t -= 1;
+      $("timer").textContent = Math.max(0, t);
+      if (t <= 0) { clearInterval(tick); $("hint").textContent = "ครบเวลาแล้ว กำลังออกคีย์..."; issue(); }
+    }, 1000);
+  }
+
+  async function issue() {
+    try {
+      const r = await fetch("./issue?uid=" + encodeURIComponent(UID));
+      const j = await r.json();
+      if (j.ok && j.key) {
+        $("key").textContent = j.key;
+        $("note").textContent = "คีย์นี้ผูกกับเครื่องของคุณ — หมดอายุใน " + j.expires_in_hours + " ชั่วโมง";
+        show(3);
+      } else if (j.wait) {
+        startCountdown(j.wait);
+      } else {
+        $("hint").textContent = "เกิดข้อผิดพลาด: " + (j.error || "ไม่ทราบสาเหตุ");
+        show(2);
+      }
+    } catch (e) {
+      $("hint").textContent = "เชื่อมต่อไม่ได้: " + e;
+    }
+  }
+
+  $("adBtn").addEventListener("click", async () => {
+    window.open(AD, "_blank");                   // เปิดโฆษณาแท็บใหม่
+    try { await fetch("./adstart?uid=" + encodeURIComponent(UID)); } catch (e) {}
+    startCountdown(WAIT);
+  });
+
+  $("copy").addEventListener("click", async (e) => {
+    const t = $("key").textContent;
+    try { await navigator.clipboard.writeText(t); }
+    catch (err) {
+      const r = document.createRange(); r.selectNodeContents($("key"));
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand("copy");
+    }
+    e.target.textContent = "คัดลอกแล้ว ✓";
+    setTimeout(() => e.target.textContent = "คัดลอกคีย์", 1800);
+  });
+
+  // กู้สถานะ: ถ้าเคยเริ่มดูโฆษณาแล้ว ให้ไปต่อจากจุดนั้น
+  (async () => {
+    try {
+      const r = await fetch("./status?uid=" + encodeURIComponent(UID));
+      const j = await r.json();
+      if (j.key) { $("key").textContent = j.key; $("note").textContent = "คีย์เดิมของคุณ (ยังไม่หมดอายุ)"; show(3); }
+      else if (j.wait > 0) { startCountdown(j.wait); }
+      else if (j.started) { issue(); }
+    } catch (e) {}
+  })();
+</script>
+</body></html>

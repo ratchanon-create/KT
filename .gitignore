@@ -1,0 +1,13 @@
+# ── สคริปต์เกมที่ป้องกันไว้ ──
+# ไฟล์นี้ต้อง "ไม่ขึ้น GitHub" (เก็บไว้ในเครื่อง + Cloudflare KV)
+# ถ้าหลุดขึ้นเว็บ = คนอื่นดูดโค้ดไปได้เลย
+games/anime-dice.lua
+
+# ── ไฟล์ที่เกิดตอนรันในเกม ──
+kistrox_log.txt
+kistrox_keyinfo.txt
+kistrox_cache_*.lua
+
+# ── ของชั่วคราว ──
+_t/
+node_modules/
